@@ -1,0 +1,3376 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-50">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Flujo de Llamadas</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+  >
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+    rel="stylesheet"
+  >
+
+  <style>
+    body {
+      font-family: Inter, sans-serif;
+    }
+
+    .heatCell {
+      min-width: 132px;
+    }
+
+    .editCell {
+      min-width: 92px;
+      outline: none;
+    }
+
+    .editCell:focus {
+      background: #ecfdf5 !important;
+      box-shadow: inset 0 0 0 2px #10b981;
+    }
+
+    .collapsed {
+      display: none;
+    }
+
+    .viewButtonActive {
+      background: #059669;
+      color: white;
+      border-color: #059669;
+    }
+
+    .viewButtonInactive {
+      background: white;
+      color: #475569;
+      border-color: #e2e8f0;
+    }
+
+    .viewButtonInactive:hover {
+      background: #f8fafc;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+
+<body class="min-h-full bg-slate-50 text-slate-800">
+
+  <!-- ======================================================
+       HEADER
+  ======================================================= -->
+
+  <header class="bg-slate-950 text-white px-6 py-4 border-b border-emerald-950/40">
+    <div class="max-w-[1700px] mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+
+      <div class="flex items-center gap-3">
+        <div class="bg-emerald-600 p-3 rounded-xl">
+          <i class="fa-solid fa-chart-line text-xl"></i>
+        </div>
+
+        <div>
+          <h1 class="text-xl font-extrabold">
+            FLUJO DE LLAMADAS
+          </h1>
+
+          <p class="text-xs font-semibold text-emerald-400 uppercase tracking-widest">
+            Distribución operativa por horario
+          </p>
+        </div>
+      </div>
+
+      <div
+        id="saveStatus"
+        class="hidden px-4 py-2 rounded-xl bg-emerald-900/50 border border-emerald-800 text-xs font-bold text-emerald-200"
+      >
+        <i class="fa-solid fa-circle-check mr-1"></i>
+        Información guardada
+      </div>
+
+    </div>
+  </header>
+
+
+  <!-- ======================================================
+       CONTENIDO
+  ======================================================= -->
+
+  <main class="px-4 py-6 md:px-8 max-w-[1700px] w-full mx-auto space-y-8">
+
+    <!-- TÍTULO, VISTA Y SELECTOR -->
+
+    <section class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+
+      <div class="flex items-center gap-3">
+        <span class="h-10 w-1.5 bg-emerald-500 rounded-full"></span>
+
+        <div>
+          <h2 class="text-lg font-black uppercase tracking-tight">
+            Flujo de Llamadas
+          </h2>
+
+          <p class="text-sm text-slate-500">
+            Llamadas, agentes, abandonadas y perdidas en intervalos de 30 minutos.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex flex-col md:flex-row md:items-center gap-3">
+
+        <div class="bg-white border border-slate-200 rounded-2xl p-1.5 shadow-sm flex items-center gap-1.5">
+
+          <button
+            id="dailyViewButton"
+            type="button"
+            onclick="setChartView('daily')"
+            class="viewButtonActive border px-4 py-2 rounded-xl text-xs font-black transition"
+          >
+            <i class="fa-solid fa-calendar-day mr-1"></i>
+            Vista diaria
+          </button>
+
+          <button
+            id="weeklyViewButton"
+            type="button"
+            onclick="setChartView('weekly')"
+            class="viewButtonInactive border px-4 py-2 rounded-xl text-xs font-black transition"
+          >
+            <i class="fa-solid fa-calendar-week mr-1"></i>
+            Semana completa
+          </button>
+
+        </div>
+
+        <div
+          id="daySelectorWrap"
+          class="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm flex items-center gap-3"
+        >
+          <label
+            for="daySelector"
+            class="text-xs font-black uppercase tracking-wide text-slate-500"
+          >
+            Día visible
+          </label>
+
+          <select
+            id="daySelector"
+            onchange="changeSelectedDay()"
+            class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500"
+          >
+            <option value="Lunes">Lunes</option>
+            <option value="Martes">Martes</option>
+            <option value="Miércoles">Miércoles</option>
+            <option value="Jueves">Jueves</option>
+            <option value="Viernes">Viernes</option>
+            <option value="Sábado">Sábado</option>
+            <option value="Domingo">Domingo</option>
+          </select>
+        </div>
+
+      </div>
+    </section>
+
+
+    <!-- ======================================================
+         CARGA AUTOMÁTICA DE CSV / EXCEL
+    ======================================================= -->
+
+    <section class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+
+      <div class="p-5 border-b border-slate-100">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+
+          <div class="flex items-start gap-3">
+            <span class="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+              <i class="fa-solid fa-file-arrow-up"></i>
+            </span>
+
+            <div>
+              <h3 class="font-black text-slate-900">
+                Cargar reporte de llamadas
+              </h3>
+
+              <p
+                id="fileUploaderDescription"
+                class="text-xs text-slate-500 font-semibold mt-1"
+              >
+                Admite CSV, XLS y XLSX. Convierte Start Time de Los Ángeles a Cancún sumando 2 horas y agrupa cada 30 minutos.
+              </p>
+
+              <p
+                id="fileUploaderCompactSummary"
+                class="hidden text-xs text-emerald-700 font-bold mt-1"
+              ></p>
+            </div>
+          </div>
+
+          <button
+            id="fileUploaderToggleButton"
+            type="button"
+            onclick="toggleFileUploader()"
+            class="hidden px-4 py-2 bg-slate-900 text-white text-xs font-extrabold rounded-xl hover:bg-slate-800 shrink-0"
+          >
+            <i class="fa-solid fa-chevron-down mr-1"></i>
+            <span id="fileUploaderToggleLabel">Mostrar</span>
+          </button>
+
+        </div>
+      </div>
+
+      <div id="fileUploaderBody" class="p-5 space-y-4">
+
+        <div class="flex flex-col lg:flex-row lg:items-center gap-3">
+
+          <label
+            for="callFileInput"
+            class="flex-1 cursor-pointer border-2 border-dashed border-slate-300 rounded-2xl p-5 hover:border-emerald-400 hover:bg-emerald-50/40 transition"
+          >
+            <div class="flex items-center gap-3">
+              <span class="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center">
+                <i class="fa-solid fa-table"></i>
+              </span>
+
+              <div>
+                <b class="block text-sm text-slate-900">
+                  Seleccionar archivo
+                </b>
+
+                <span id="selectedFileName" class="block text-xs text-slate-500 mt-1">
+                  Ningún archivo seleccionado
+                </span>
+              </div>
+            </div>
+          </label>
+
+          <input
+            id="callFileInput"
+            type="file"
+            accept=".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            onchange="handleSelectedFile(event)"
+            class="hidden"
+          >
+
+          <button
+            id="processFileButton"
+            type="button"
+            onclick="processSelectedFile()"
+            disabled
+            class="px-5 py-3 bg-emerald-600 text-white text-xs font-extrabold rounded-xl hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <i class="fa-solid fa-chart-line mr-1"></i>
+            Cargar y generar gráficas
+          </button>
+
+        </div>
+
+        <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs font-semibold text-amber-900">
+          <i class="fa-solid fa-circle-info mr-1"></i>
+          “Agentes” se calcula como nombres únicos de <strong>Callee Name</strong> con actividad en cada intervalo. 
+          “Perdidas” corresponde a <strong>Missed</strong> sin contar nuevamente las que también aparecen como <strong>Abandoned</strong>.
+        </div>
+
+        <div
+          id="fileImportStatus"
+          class="hidden rounded-2xl border p-4 text-sm font-semibold"
+        ></div>
+
+        <div
+          id="fileImportSummary"
+          class="hidden grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3"
+        >
+          <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <span class="block text-[10px] uppercase font-black text-slate-400">Registros</span>
+            <b id="summaryRows" class="block text-xl mt-1 text-slate-900">0</b>
+          </div>
+
+          <div class="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+            <span class="block text-[10px] uppercase font-black text-rose-500">Llamadas</span>
+            <b id="summaryCalls" class="block text-xl mt-1 text-rose-900">0</b>
+          </div>
+
+          <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <span class="block text-[10px] uppercase font-black text-emerald-600">Aceptadas</span>
+            <b id="summaryAnswered" class="block text-xl mt-1 text-emerald-900">0</b>
+          </div>
+
+          <div class="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+            <span class="block text-[10px] uppercase font-black text-blue-600">Abandonadas</span>
+            <b id="summaryAbandoned" class="block text-xl mt-1 text-blue-900">0</b>
+          </div>
+
+          <div class="rounded-2xl border border-orange-200 bg-orange-50 p-4">
+            <span class="block text-[10px] uppercase font-black text-orange-600">Perdidas</span>
+            <b id="summaryMissed" class="block text-xl mt-1 text-orange-900">0</b>
+          </div>
+
+          <div class="rounded-2xl border border-violet-200 bg-violet-50 p-4">
+            <span class="block text-[10px] uppercase font-black text-violet-600">Agentes únicos</span>
+            <b id="summaryAgents" class="block text-xl mt-1 text-violet-900">0</b>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- ======================================================
+         GRÁFICA
+    ======================================================= -->
+
+    <section class="bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
+
+      <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-4">
+
+        <div>
+          <h3 id="chartTitle" class="font-black text-slate-900">
+            Distribución por horario
+          </h3>
+
+          <p id="chartDescription" class="text-xs text-slate-400 font-semibold">
+            Rojo = llamadas · Verde = agentes · Azul = abandonadas · Naranja = perdidas
+          </p>
+        </div>
+
+        <span
+          id="chartDayLabel"
+          class="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 px-3 py-1 rounded-full font-black uppercase"
+        >
+          Lunes
+        </span>
+
+      </div>
+
+      <div id="chartScrollWrap" class="h-[540px] overflow-x-auto overflow-y-hidden">
+        <div id="chartCanvasWrap" class="h-full min-w-full">
+          <canvas id="hourlyFlowChart"></canvas>
+        </div>
+      </div>
+
+    </section>
+
+
+    <!-- ======================================================
+         MATRIZ SEMÁFORO
+    ======================================================= -->
+
+    <section class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+
+      <div class="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+
+        <div>
+          <h3 class="font-black text-slate-900">
+            Matriz semáforo
+          </h3>
+
+          <p class="text-xs text-slate-400 font-semibold">
+            Llamadas y agentes asignados por día en intervalos de 30 minutos.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onclick="toggleBlock('heatmapWrap', 'heatmapToggle')"
+          class="px-4 py-2 bg-slate-900 text-white text-xs font-extrabold rounded-xl hover:bg-slate-800"
+        >
+          <span id="heatmapToggle">Ocultar</span>
+        </button>
+
+      </div>
+
+      <div id="heatmapWrap" class="p-5 overflow-x-auto">
+        <table
+          id="heatmapTable"
+          class="w-full text-left text-xs border-separate border-spacing-1"
+        ></table>
+      </div>
+
+    </section>
+
+
+    <!-- ======================================================
+         BOTÓN GENERAL
+    ======================================================= -->
+
+    <section class="bg-emerald-50 border border-emerald-100 rounded-3xl p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+
+      <div class="flex items-start gap-3">
+
+        <span class="w-10 h-10 rounded-2xl bg-white text-emerald-700 flex items-center justify-center shrink-0">
+          <i class="fa-solid fa-floppy-disk"></i>
+        </span>
+
+        <div>
+          <h3 class="font-black text-sm uppercase text-emerald-900">
+            Guardar información
+          </h3>
+
+          <p class="text-sm font-semibold text-emerald-800">
+            Guarda las cuatro tablas y actualiza las vistas diaria y semanal.
+          </p>
+        </div>
+
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+
+        <button
+          type="button"
+          onclick="saveAllMatrices()"
+          class="px-5 py-2.5 bg-emerald-600 text-white text-xs font-extrabold rounded-xl hover:bg-emerald-700"
+        >
+          <i class="fa-solid fa-floppy-disk mr-1"></i>
+          Guardar todo
+        </button>
+
+        <button
+          type="button"
+          onclick="resetAllMatrices()"
+          class="px-5 py-2.5 bg-white text-rose-700 border border-rose-200 text-xs font-extrabold rounded-xl hover:bg-rose-50"
+        >
+          <i class="fa-solid fa-rotate-left mr-1"></i>
+          Reiniciar todo
+        </button>
+
+      </div>
+
+    </section>
+
+
+    <!-- ======================================================
+         EDITOR DE LLAMADAS
+    ======================================================= -->
+
+    <section class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+
+      <div class="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+
+        <div>
+          <h3 class="font-black text-slate-900">
+            Editor 1 — Llamadas recibidas
+          </h3>
+
+          <p class="text-xs text-slate-400 font-semibold">
+            Número de llamadas recibidas por día y cada media hora.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+
+          <button
+            type="button"
+            onclick="saveAllMatrices()"
+            class="px-4 py-2 bg-emerald-600 text-white text-xs font-extrabold rounded-xl hover:bg-emerald-700"
+          >
+            Guardar
+          </button>
+
+          <button
+            type="button"
+            onclick="toggleBlock('callsEditorWrap', 'callsEditorToggle')"
+            class="px-4 py-2 bg-slate-900 text-white text-xs font-extrabold rounded-xl"
+          >
+            <span id="callsEditorToggle">Ocultar</span>
+          </button>
+
+        </div>
+
+      </div>
+
+      <div id="callsEditorWrap" class="p-5 overflow-x-auto">
+
+        <div class="mb-4 text-[11px] text-slate-500 font-semibold bg-slate-50 border border-slate-200 rounded-2xl p-3">
+          Puedes editar una celda o pegar un rango completo desde Excel o
+          Google Sheets utilizando <strong>Ctrl + V</strong>.
+        </div>
+
+        <table
+          id="callsEditor"
+          class="w-full text-left text-xs border-separate border-spacing-1"
+        ></table>
+
+      </div>
+
+    </section>
+
+
+    <!-- ======================================================
+         EDITOR DE AGENTES
+    ======================================================= -->
+
+    <section class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+
+      <div class="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+
+        <div>
+          <h3 class="font-black text-slate-900">
+            Editor 2 — Agentes asignados
+          </h3>
+
+          <p class="text-xs text-slate-400 font-semibold">
+            Número de colaboradores asignados en cada intervalo de 30 minutos.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+
+          <button
+            type="button"
+            onclick="saveAllMatrices()"
+            class="px-4 py-2 bg-emerald-600 text-white text-xs font-extrabold rounded-xl hover:bg-emerald-700"
+          >
+            Guardar
+          </button>
+
+          <button
+            type="button"
+            onclick="toggleBlock('agentsEditorWrap', 'agentsEditorToggle')"
+            class="px-4 py-2 bg-slate-900 text-white text-xs font-extrabold rounded-xl"
+          >
+            <span id="agentsEditorToggle">Ocultar</span>
+          </button>
+
+        </div>
+
+      </div>
+
+      <div id="agentsEditorWrap" class="p-5 overflow-x-auto">
+
+        <div class="mb-4 text-[11px] text-slate-500 font-semibold bg-slate-50 border border-slate-200 rounded-2xl p-3">
+          Ingresa únicamente el número de agentes asignados en cada horario.
+        </div>
+
+        <table
+          id="agentsEditor"
+          class="w-full text-left text-xs border-separate border-spacing-1"
+        ></table>
+
+      </div>
+
+    </section>
+
+
+    <!-- ======================================================
+         EDITOR DE ABANDONADAS
+    ======================================================= -->
+
+    <section class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+
+      <div class="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+
+        <div>
+          <h3 class="font-black text-slate-900">
+            Editor 3 — Llamadas abandonadas
+          </h3>
+
+          <p class="text-xs text-slate-400 font-semibold">
+            La gráfica mostrará el número y el porcentaje de abandono.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+
+          <button
+            type="button"
+            onclick="saveAllMatrices()"
+            class="px-4 py-2 bg-emerald-600 text-white text-xs font-extrabold rounded-xl hover:bg-emerald-700"
+          >
+            Guardar
+          </button>
+
+          <button
+            type="button"
+            onclick="toggleBlock('abandonedEditorWrap', 'abandonedEditorToggle')"
+            class="px-4 py-2 bg-slate-900 text-white text-xs font-extrabold rounded-xl"
+          >
+            <span id="abandonedEditorToggle">Ocultar</span>
+          </button>
+
+        </div>
+
+      </div>
+
+      <div id="abandonedEditorWrap" class="p-5 overflow-x-auto">
+
+        <div class="mb-4 text-[11px] text-slate-500 font-semibold bg-slate-50 border border-slate-200 rounded-2xl p-3">
+          Ingresa el número de llamadas abandonadas. El porcentaje se calcula
+          dividiendo abandonadas entre llamadas recibidas.
+        </div>
+
+        <table
+          id="abandonedEditor"
+          class="w-full text-left text-xs border-separate border-spacing-1"
+        ></table>
+
+      </div>
+
+    </section>
+
+
+    <!-- ======================================================
+         EDITOR DE PERDIDAS
+    ======================================================= -->
+
+    <section class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+
+      <div class="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+
+        <div>
+          <h3 class="font-black text-slate-900">
+            Editor 4 — Llamadas perdidas
+          </h3>
+
+          <p class="text-xs text-slate-400 font-semibold">
+            La gráfica mostrará el número y el porcentaje de llamadas perdidas.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+
+          <button
+            type="button"
+            onclick="saveAllMatrices()"
+            class="px-4 py-2 bg-emerald-600 text-white text-xs font-extrabold rounded-xl hover:bg-emerald-700"
+          >
+            Guardar
+          </button>
+
+          <button
+            type="button"
+            onclick="toggleBlock('missedEditorWrap', 'missedEditorToggle')"
+            class="px-4 py-2 bg-slate-900 text-white text-xs font-extrabold rounded-xl"
+          >
+            <span id="missedEditorToggle">Ocultar</span>
+          </button>
+
+        </div>
+
+      </div>
+
+      <div id="missedEditorWrap" class="p-5 overflow-x-auto">
+
+        <div class="mb-4 text-[11px] text-slate-500 font-semibold bg-slate-50 border border-slate-200 rounded-2xl p-3">
+          Ingresa el número de llamadas perdidas. El porcentaje se calcula
+          dividiendo perdidas entre llamadas recibidas.
+        </div>
+
+        <table
+          id="missedEditor"
+          class="w-full text-left text-xs border-separate border-spacing-1"
+        ></table>
+
+      </div>
+
+    </section>
+
+  </main>
+
+
+  <script>
+    /*
+    ==========================================================
+    CONFIGURACIÓN
+    ==========================================================
+    */
+
+    const DAYS = [
+      'Lunes',
+      'Martes',
+      'Miércoles',
+      'Jueves',
+      'Viernes',
+      'Sábado',
+      'Domingo'
+    ];
+
+    const TIME_SLOTS = [];
+
+    for (let hour = 7; hour <= 19; hour++) {
+      TIME_SLOTS.push(`${hour}:00`);
+      TIME_SLOTS.push(`${hour}:30`);
+    }
+
+    const STORAGE_KEYS = {
+      calls: 'flowCallsMatrixV4',
+      agents: 'flowAgentsMatrixV4',
+      abandoned: 'flowAbandonedMatrixV4',
+      missed: 'flowMissedMatrixV4',
+      selectedDay: 'flowSelectedDayV4',
+      chartView: 'flowChartViewV4',
+
+      oldCallsV3: 'flowCallsMatrixV3',
+      oldAgentsV3: 'flowAgentsMatrixV3',
+      oldAbandonedV3: 'flowAbandonedMatrixV3',
+      oldSelectedDayV3: 'flowSelectedDayV3',
+
+      oldCallsV2: 'flowCallsMatrixV2',
+      oldAgentsV2: 'flowAgentsMatrixV2',
+      oldAbandonedV2: 'flowAbandonedMatrixV2',
+      oldSelectedDayV2: 'flowSelectedDayV2'
+    };
+
+    let callsMatrix = {};
+    let agentsMatrix = {};
+    let abandonedMatrix = {};
+    let missedMatrix = {};
+
+    let selectedDay = 'Lunes';
+    let chartView = 'daily';
+    let hourlyFlowChart = null;
+    let selectedCallFile = null;
+
+
+    /*
+    ==========================================================
+    UTILIDADES
+    ==========================================================
+    */
+
+    function num(value) {
+      if (
+        value === null ||
+        value === undefined ||
+        value === ''
+      ) {
+        return 0;
+      }
+
+      if (typeof value === 'number') {
+        return Number.isFinite(value)
+          ? value
+          : 0;
+      }
+
+      const parsed = parseFloat(
+        String(value)
+          .replace('%', '')
+          .replace(',', '.')
+          .replace(/[^\d.-]/g, '')
+      );
+
+      return Number.isFinite(parsed)
+        ? parsed
+        : 0;
+    }
+
+
+    function pct(value) {
+      return `${num(value).toFixed(1)}%`;
+    }
+
+
+    function parseTimeSlot(slot) {
+      const [hour, minute] =
+        String(slot).split(':');
+
+      return {
+        hour: num(hour),
+        minute: num(minute)
+      };
+    }
+
+
+    function formatClock(hour, minute = 0) {
+      const normalizedHour =
+        ((num(hour) % 24) + 24) % 24;
+
+      const suffix =
+        normalizedHour >= 12
+          ? 'pm'
+          : 'am';
+
+      let displayHour =
+        normalizedHour % 12;
+
+      if (displayHour === 0) {
+        displayHour = 12;
+      }
+
+      return `${displayHour}:${String(minute).padStart(2, '0')}${suffix}`;
+    }
+
+
+    function formatTimeSlot(slot) {
+      const { hour, minute } =
+        parseTimeSlot(slot);
+
+      return formatClock(hour, minute);
+    }
+
+
+    function getNextTimeSlot(slot) {
+      const { hour, minute } =
+        parseTimeSlot(slot);
+
+      const totalMinutes =
+        hour * 60 + minute + 30;
+
+      return {
+        hour: Math.floor(totalMinutes / 60),
+        minute: totalMinutes % 60
+      };
+    }
+
+
+    function rangeTimeSlot(slot) {
+      const current =
+        parseTimeSlot(slot);
+
+      const next =
+        getNextTimeSlot(slot);
+
+      return `${formatClock(
+        current.hour,
+        current.minute
+      )} - ${formatClock(
+        next.hour,
+        next.minute
+      )}`;
+    }
+
+
+    function toggleBlock(elementId, labelId) {
+      const element =
+        document.getElementById(elementId);
+
+      const label =
+        document.getElementById(labelId);
+
+      if (!element || !label) {
+        return;
+      }
+
+      element.classList.toggle('collapsed');
+
+      label.innerText =
+        element.classList.contains('collapsed')
+          ? 'Mostrar'
+          : 'Ocultar';
+    }
+
+
+    function showSaveStatus() {
+      const status =
+        document.getElementById('saveStatus');
+
+      status.classList.remove('hidden');
+
+      window.clearTimeout(
+        showSaveStatus.timeout
+      );
+
+      showSaveStatus.timeout =
+        window.setTimeout(() => {
+          status.classList.add('hidden');
+        }, 2500);
+    }
+
+
+    /*
+    ==========================================================
+    MATRICES
+    ==========================================================
+    */
+
+    function createEmptyMatrix() {
+      const matrix = {};
+
+      DAYS.forEach(day => {
+        matrix[day] = {};
+
+        TIME_SLOTS.forEach(slot => {
+          matrix[day][slot] = 0;
+        });
+      });
+
+      return matrix;
+    }
+
+
+    function normalizeMatrix(
+      matrix,
+      matrixType
+    ) {
+      const normalized =
+        createEmptyMatrix();
+
+      DAYS.forEach(day => {
+        TIME_SLOTS.forEach(slot => {
+          const directValue =
+            matrix?.[day]?.[slot];
+
+          if (
+            directValue !== undefined &&
+            directValue !== null
+          ) {
+            normalized[day][slot] =
+              Math.max(
+                0,
+                Math.round(
+                  num(directValue)
+                )
+              );
+
+            return;
+          }
+
+          const { hour, minute } =
+            parseTimeSlot(slot);
+
+          const oldHourlyValue =
+            matrix?.[day]?.[hour] ??
+            matrix?.[day]?.[String(hour)];
+
+          if (
+            oldHourlyValue === undefined ||
+            oldHourlyValue === null
+          ) {
+            normalized[day][slot] = 0;
+            return;
+          }
+
+          const oldValue =
+            Math.max(
+              0,
+              Math.round(
+                num(oldHourlyValue)
+              )
+            );
+
+          if (matrixType === 'agents') {
+            normalized[day][slot] =
+              oldValue;
+          } else {
+            normalized[day][slot] =
+              minute === 0
+                ? Math.ceil(oldValue / 2)
+                : Math.floor(oldValue / 2);
+          }
+        });
+      });
+
+      return normalized;
+    }
+
+
+    /*
+    ==========================================================
+    DATOS INICIALES
+    ==========================================================
+    */
+
+    function defaultCallsMatrix() {
+      const matrix =
+        createEmptyMatrix();
+
+      const hourlyValues = [
+        ['Lunes', 7, 35],
+        ['Lunes', 8, 42],
+        ['Lunes', 9, 58],
+        ['Lunes', 10, 66],
+        ['Lunes', 11, 79],
+        ['Lunes', 12, 65],
+        ['Lunes', 13, 66],
+        ['Lunes', 14, 70],
+        ['Lunes', 15, 60],
+        ['Lunes', 16, 58],
+        ['Lunes', 17, 40],
+        ['Lunes', 18, 26],
+        ['Lunes', 19, 12],
+
+        ['Martes', 7, 34],
+        ['Martes', 8, 48],
+        ['Martes', 9, 63],
+        ['Martes', 10, 76],
+        ['Martes', 11, 84],
+        ['Martes', 12, 82],
+        ['Martes', 13, 104],
+        ['Martes', 14, 118],
+        ['Martes', 15, 97],
+        ['Martes', 16, 100],
+        ['Martes', 17, 79],
+        ['Martes', 18, 71],
+        ['Martes', 19, 24],
+
+        ['Miércoles', 7, 30],
+        ['Miércoles', 8, 44],
+        ['Miércoles', 9, 61],
+        ['Miércoles', 10, 70],
+        ['Miércoles', 11, 72],
+        ['Miércoles', 12, 86],
+        ['Miércoles', 13, 84],
+        ['Miércoles', 14, 93],
+        ['Miércoles', 15, 79],
+        ['Miércoles', 16, 81],
+        ['Miércoles', 17, 58],
+        ['Miércoles', 18, 34],
+        ['Miércoles', 19, 15],
+
+        ['Jueves', 7, 28],
+        ['Jueves', 8, 39],
+        ['Jueves', 9, 64],
+        ['Jueves', 10, 76],
+        ['Jueves', 11, 79],
+        ['Jueves', 12, 80],
+        ['Jueves', 13, 88],
+        ['Jueves', 14, 78],
+        ['Jueves', 15, 83],
+        ['Jueves', 16, 82],
+        ['Jueves', 17, 69],
+        ['Jueves', 18, 35],
+        ['Jueves', 19, 14],
+
+        ['Viernes', 7, 40],
+        ['Viernes', 8, 55],
+        ['Viernes', 9, 68],
+        ['Viernes', 10, 77],
+        ['Viernes', 11, 82],
+        ['Viernes', 12, 112],
+        ['Viernes', 13, 109],
+        ['Viernes', 14, 100],
+        ['Viernes', 15, 104],
+        ['Viernes', 16, 96],
+        ['Viernes', 17, 77],
+        ['Viernes', 18, 43],
+        ['Viernes', 19, 20],
+
+        ['Sábado', 7, 9],
+        ['Sábado', 8, 12],
+        ['Sábado', 9, 15],
+        ['Sábado', 10, 22],
+        ['Sábado', 11, 26],
+        ['Sábado', 12, 31],
+        ['Sábado', 13, 28],
+        ['Sábado', 14, 24],
+        ['Sábado', 15, 20],
+        ['Sábado', 16, 16],
+        ['Sábado', 17, 12],
+        ['Sábado', 18, 8],
+        ['Sábado', 19, 4],
+
+        ['Domingo', 7, 0],
+        ['Domingo', 8, 0],
+        ['Domingo', 9, 3],
+        ['Domingo', 10, 5],
+        ['Domingo', 11, 8],
+        ['Domingo', 12, 10],
+        ['Domingo', 13, 9],
+        ['Domingo', 14, 6],
+        ['Domingo', 15, 5],
+        ['Domingo', 16, 4],
+        ['Domingo', 17, 2],
+        ['Domingo', 18, 0],
+        ['Domingo', 19, 0]
+      ];
+
+      hourlyValues.forEach(
+        ([day, hour, total]) => {
+          matrix[day][`${hour}:00`] =
+            Math.ceil(total / 2);
+
+          matrix[day][`${hour}:30`] =
+            Math.floor(total / 2);
+        }
+      );
+
+      return matrix;
+    }
+
+
+    function defaultAgentsMatrix() {
+      const matrix =
+        createEmptyMatrix();
+
+      DAYS.forEach(day => {
+        const isWeekend =
+          day === 'Sábado' ||
+          day === 'Domingo';
+
+        TIME_SLOTS.forEach(slot => {
+          const { hour } =
+            parseTimeSlot(slot);
+
+          if (isWeekend) {
+            matrix[day][slot] =
+              day === 'Sábado' &&
+              hour >= 9 &&
+              hour <= 16
+                ? 4
+                : 0;
+
+            return;
+          }
+
+          if (hour === 7) {
+            matrix[day][slot] = 5;
+          } else if (hour === 8) {
+            matrix[day][slot] = 10;
+          } else if (hour === 9) {
+            matrix[day][slot] = 12;
+          } else if (
+            hour >= 10 &&
+            hour <= 14
+          ) {
+            matrix[day][slot] = 15;
+          } else if (hour === 15) {
+            matrix[day][slot] = 11;
+          } else if (hour === 16) {
+            matrix[day][slot] = 8;
+          } else if (hour === 17) {
+            matrix[day][slot] = 5;
+          } else if (hour === 18) {
+            matrix[day][slot] = 3;
+          } else {
+            matrix[day][slot] = 1;
+          }
+        });
+      });
+
+      return matrix;
+    }
+
+
+    function defaultAbandonedMatrix() {
+      const matrix =
+        createEmptyMatrix();
+
+      const defaultCalls =
+        defaultCallsMatrix();
+
+      DAYS.forEach(day => {
+        TIME_SLOTS.forEach(slot => {
+          const calls =
+            num(defaultCalls?.[day]?.[slot]);
+
+          let rate = 0.02;
+
+          if (calls >= 45) {
+            rate = 0.08;
+          } else if (calls >= 35) {
+            rate = 0.06;
+          } else if (calls >= 20) {
+            rate = 0.04;
+          }
+
+          matrix[day][slot] =
+            Math.round(calls * rate);
+        });
+      });
+
+      return matrix;
+    }
+
+
+    function defaultMissedMatrix() {
+      const matrix =
+        createEmptyMatrix();
+
+      const defaultCalls =
+        defaultCallsMatrix();
+
+      DAYS.forEach(day => {
+        TIME_SLOTS.forEach(slot => {
+          const calls =
+            num(defaultCalls?.[day]?.[slot]);
+
+          let rate = 0.01;
+
+          if (calls >= 45) {
+            rate = 0.05;
+          } else if (calls >= 35) {
+            rate = 0.04;
+          } else if (calls >= 20) {
+            rate = 0.025;
+          }
+
+          matrix[day][slot] =
+            Math.round(calls * rate);
+        });
+      });
+
+      return matrix;
+    }
+
+
+    /*
+    ==========================================================
+    CÁLCULOS
+    ==========================================================
+    */
+
+    function metricRate(
+      metricMatrix,
+      day,
+      slot
+    ) {
+      const calls =
+        num(callsMatrix?.[day]?.[slot]);
+
+      const metricValue =
+        num(metricMatrix?.[day]?.[slot]);
+
+      if (calls <= 0) {
+        return 0;
+      }
+
+      return Math.min(
+        100,
+        metricValue / calls * 100
+      );
+    }
+
+
+    function abandonmentRate(day, slot) {
+      return metricRate(
+        abandonedMatrix,
+        day,
+        slot
+      );
+    }
+
+
+    function missedRate(day, slot) {
+      return metricRate(
+        missedMatrix,
+        day,
+        slot
+      );
+    }
+
+
+    function sumDay(matrix, day) {
+      return TIME_SLOTS.reduce(
+        (total, slot) =>
+          total + num(matrix?.[day]?.[slot]),
+        0
+      );
+    }
+
+
+    function averageDay(matrix, day) {
+      const values =
+        TIME_SLOTS
+          .map(slot =>
+            num(matrix?.[day]?.[slot])
+          )
+          .filter(value => value > 0);
+
+      if (!values.length) {
+        return 0;
+      }
+
+      return values.reduce(
+        (total, value) => total + value,
+        0
+      ) / values.length;
+    }
+
+
+    function dailyMetricRate(
+      metricMatrix,
+      day
+    ) {
+      const calls =
+        sumDay(callsMatrix, day);
+
+      const metricTotal =
+        sumDay(metricMatrix, day);
+
+      if (calls <= 0) {
+        return 0;
+      }
+
+      return Math.min(
+        100,
+        metricTotal / calls * 100
+      );
+    }
+
+
+    /*
+    ==========================================================
+    IMPORTACIÓN DE CSV / EXCEL
+    ==========================================================
+    */
+
+    const REQUIRED_IMPORT_COLUMNS = [
+      'Call ID',
+      'Start Time',
+      'Direction',
+      'Callee Name',
+      'Answered',
+      'Missed',
+      'Abandoned'
+    ];
+
+
+    function cleanText(value) {
+      return String(
+        value ?? ''
+      ).trim();
+    }
+
+
+    function normalizeFlag(value) {
+      return cleanText(value)
+        .toLowerCase()
+        .replace(/\s+/g, ' ');
+    }
+
+
+    function isPositiveFlag(
+      value,
+      expectedWord
+    ) {
+      const normalized =
+        normalizeFlag(value);
+
+      return (
+        normalized === expectedWord ||
+        normalized === 'yes' ||
+        normalized === 'true' ||
+        normalized === '1' ||
+        normalized === 'si' ||
+        normalized === 'sí'
+      );
+    }
+
+
+    function isIncomingDirection(value) {
+      const normalized =
+        normalizeFlag(value);
+
+      return (
+        normalized === '' ||
+        normalized === 'incoming' ||
+        normalized === 'inbound' ||
+        normalized === 'entrante'
+      );
+    }
+
+
+    function excelSerialToDate(serial) {
+      const parsed =
+        XLSX.SSF.parse_date_code(
+          num(serial)
+        );
+
+      if (!parsed) {
+        return null;
+      }
+
+      return new Date(
+        parsed.y,
+        parsed.m - 1,
+        parsed.d,
+        parsed.H,
+        parsed.M,
+        Math.floor(parsed.S || 0)
+      );
+    }
+
+
+    function parseStartTime(value) {
+      if (
+        value instanceof Date &&
+        !Number.isNaN(value.getTime())
+      ) {
+        return new Date(
+          value.getTime()
+        );
+      }
+
+      if (
+        typeof value === 'number' &&
+        Number.isFinite(value)
+      ) {
+        return excelSerialToDate(value);
+      }
+
+      const text =
+        cleanText(value);
+
+      if (!text) {
+        return null;
+      }
+
+      const match =
+        text.match(
+          /^(\d{1,2})\/(\d{1,2})\/(\d{4})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?$/
+        );
+
+      if (match) {
+        const [
+          ,
+          month,
+          day,
+          year,
+          hour,
+          minute,
+          second = '0'
+        ] = match;
+
+        const date =
+          new Date(
+            Number(year),
+            Number(month) - 1,
+            Number(day),
+            Number(hour),
+            Number(minute),
+            Number(second)
+          );
+
+        return Number.isNaN(
+          date.getTime()
+        )
+          ? null
+          : date;
+      }
+
+      const fallback =
+        new Date(text);
+
+      return Number.isNaN(
+        fallback.getTime()
+      )
+        ? null
+        : fallback;
+    }
+
+
+    function addCancunOffset(date) {
+      const converted =
+        new Date(
+          date.getTime()
+        );
+
+      converted.setHours(
+        converted.getHours() + 2
+      );
+
+      return converted;
+    }
+
+
+    function getSpanishDay(date) {
+      const dayIndex =
+        date.getDay();
+
+      const dayMap = [
+        'Domingo',
+        'Lunes',
+        'Martes',
+        'Miércoles',
+        'Jueves',
+        'Viernes',
+        'Sábado'
+      ];
+
+      return dayMap[dayIndex];
+    }
+
+
+    function getHalfHourSlot(date) {
+      const hour =
+        date.getHours();
+
+      const minute =
+        date.getMinutes() < 30
+          ? 0
+          : 30;
+
+      return `${hour}:${String(
+        minute
+      ).padStart(2, '0')}`;
+    }
+
+
+    function setImportStatus(
+      message,
+      type = 'success'
+    ) {
+      const status =
+        document.getElementById(
+          'fileImportStatus'
+        );
+
+      status.classList.remove(
+        'hidden',
+        'bg-emerald-50',
+        'border-emerald-200',
+        'text-emerald-900',
+        'bg-rose-50',
+        'border-rose-200',
+        'text-rose-900',
+        'bg-amber-50',
+        'border-amber-200',
+        'text-amber-900'
+      );
+
+      if (type === 'error') {
+        status.classList.add(
+          'bg-rose-50',
+          'border-rose-200',
+          'text-rose-900'
+        );
+      } else if (type === 'warning') {
+        status.classList.add(
+          'bg-amber-50',
+          'border-amber-200',
+          'text-amber-900'
+        );
+      } else {
+        status.classList.add(
+          'bg-emerald-50',
+          'border-emerald-200',
+          'text-emerald-900'
+        );
+      }
+
+      status.innerHTML = message;
+    }
+
+
+    function handleSelectedFile(event) {
+      selectedCallFile =
+        event.target.files?.[0] ||
+        null;
+
+      const fileName =
+        document.getElementById(
+          'selectedFileName'
+        );
+
+      const button =
+        document.getElementById(
+          'processFileButton'
+        );
+
+      if (!selectedCallFile) {
+        fileName.innerText =
+          'Ningún archivo seleccionado';
+
+        button.disabled = true;
+        return;
+      }
+
+      fileName.innerText =
+        selectedCallFile.name;
+
+      button.disabled = false;
+
+      setImportStatus(
+        '<i class="fa-solid fa-file-circle-check mr-1"></i> Archivo seleccionado. Presiona “Cargar y generar gráficas”.',
+        'warning'
+      );
+    }
+
+
+    function toggleFileUploader() {
+      const body =
+        document.getElementById(
+          'fileUploaderBody'
+        );
+
+      const label =
+        document.getElementById(
+          'fileUploaderToggleLabel'
+        );
+
+      const button =
+        document.getElementById(
+          'fileUploaderToggleButton'
+        );
+
+      if (
+        !body ||
+        !label ||
+        !button
+      ) {
+        return;
+      }
+
+      body.classList.toggle(
+        'collapsed'
+      );
+
+      const isCollapsed =
+        body.classList.contains(
+          'collapsed'
+        );
+
+      label.innerText =
+        isCollapsed
+          ? 'Mostrar'
+          : 'Ocultar';
+
+      button.querySelector('i')
+        .className =
+          isCollapsed
+            ? 'fa-solid fa-chevron-down mr-1'
+            : 'fa-solid fa-chevron-up mr-1';
+    }
+
+
+    function collapseFileUploader(
+      fileName,
+      validRows
+    ) {
+      const body =
+        document.getElementById(
+          'fileUploaderBody'
+        );
+
+      const description =
+        document.getElementById(
+          'fileUploaderDescription'
+        );
+
+      const compactSummary =
+        document.getElementById(
+          'fileUploaderCompactSummary'
+        );
+
+      const toggleButton =
+        document.getElementById(
+          'fileUploaderToggleButton'
+        );
+
+      const toggleLabel =
+        document.getElementById(
+          'fileUploaderToggleLabel'
+        );
+
+      if (
+        !body ||
+        !compactSummary ||
+        !toggleButton ||
+        !toggleLabel
+      ) {
+        return;
+      }
+
+      body.classList.add(
+        'collapsed'
+      );
+
+      if (description) {
+        description.classList.add(
+          'hidden'
+        );
+      }
+
+      compactSummary.innerText =
+        `${fileName || 'Archivo cargado'} · ${Number(
+          validRows || 0
+        ).toLocaleString()} llamadas procesadas`;
+
+      compactSummary.classList.remove(
+        'hidden'
+      );
+
+      toggleButton.classList.remove(
+        'hidden'
+      );
+
+      toggleLabel.innerText =
+        'Mostrar';
+
+      const icon =
+        toggleButton.querySelector('i');
+
+      if (icon) {
+        icon.className =
+          'fa-solid fa-chevron-down mr-1';
+      }
+    }
+
+
+    async function processSelectedFile() {
+      if (!selectedCallFile) {
+        setImportStatus(
+          '<i class="fa-solid fa-triangle-exclamation mr-1"></i> Selecciona un archivo CSV, XLS o XLSX.',
+          'error'
+        );
+
+        return;
+      }
+
+      const button =
+        document.getElementById(
+          'processFileButton'
+        );
+
+      button.disabled = true;
+      button.innerHTML =
+        '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Procesando';
+
+      try {
+        const buffer =
+          await selectedCallFile.arrayBuffer();
+
+        const workbook =
+          XLSX.read(
+            buffer,
+            {
+              type: 'array',
+              cellDates: true
+            }
+          );
+
+        const firstSheetName =
+          workbook.SheetNames[0];
+
+        if (!firstSheetName) {
+          throw new Error(
+            'El archivo no contiene hojas.'
+          );
+        }
+
+        const worksheet =
+          workbook.Sheets[
+            firstSheetName
+          ];
+
+        const rows =
+          XLSX.utils.sheet_to_json(
+            worksheet,
+            {
+              defval: '',
+              raw: true
+            }
+          );
+
+        importCallRows(rows);
+
+      } catch (error) {
+        console.error(
+          '[Flujo] Error al importar:',
+          error
+        );
+
+        setImportStatus(
+          `<i class="fa-solid fa-circle-xmark mr-1"></i> No se pudo procesar el archivo: ${
+            cleanText(error.message) ||
+            'formato no válido'
+          }.`,
+          'error'
+        );
+
+      } finally {
+        button.disabled = false;
+        button.innerHTML =
+          '<i class="fa-solid fa-chart-line mr-1"></i> Cargar y generar gráficas';
+      }
+    }
+
+
+    function importCallRows(rows) {
+      if (
+        !Array.isArray(rows) ||
+        !rows.length
+      ) {
+        throw new Error(
+          'El archivo está vacío.'
+        );
+      }
+
+      const availableColumns =
+        Object.keys(rows[0] || {})
+          .map(cleanText);
+
+      const missingColumns =
+        REQUIRED_IMPORT_COLUMNS.filter(
+          column =>
+            !availableColumns.includes(
+              column
+            )
+        );
+
+      if (missingColumns.length) {
+        throw new Error(
+          `Faltan columnas requeridas: ${
+            missingColumns.join(', ')
+          }`
+        );
+      }
+
+      const importedCalls =
+        createEmptyMatrix();
+
+      const importedAgents =
+        createEmptyMatrix();
+
+      const importedAbandoned =
+        createEmptyMatrix();
+
+      const importedMissed =
+        createEmptyMatrix();
+
+      const activeAgentsBySlot = {};
+
+      DAYS.forEach(day => {
+        activeAgentsBySlot[day] = {};
+
+        TIME_SLOTS.forEach(slot => {
+          activeAgentsBySlot[day][slot] =
+            new Set();
+        });
+      });
+
+      const allAgents =
+        new Set();
+
+      let validRows = 0;
+      let ignoredRows = 0;
+      let answeredTotal = 0;
+      let abandonedTotal = 0;
+      let missedTotal = 0;
+
+      rows.forEach(row => {
+        if (
+          !isIncomingDirection(
+            row['Direction']
+          )
+        ) {
+          ignoredRows += 1;
+          return;
+        }
+
+        const originalDate =
+          parseStartTime(
+            row['Start Time']
+          );
+
+        if (!originalDate) {
+          ignoredRows += 1;
+          return;
+        }
+
+        const cancunDate =
+          addCancunOffset(
+            originalDate
+          );
+
+        const day =
+          getSpanishDay(
+            cancunDate
+          );
+
+        const slot =
+          getHalfHourSlot(
+            cancunDate
+          );
+
+        if (
+          !DAYS.includes(day) ||
+          !TIME_SLOTS.includes(slot)
+        ) {
+          ignoredRows += 1;
+          return;
+        }
+
+        validRows += 1;
+        importedCalls[day][slot] += 1;
+
+        const isAnswered =
+          isPositiveFlag(
+            row['Answered'],
+            'answered'
+          );
+
+        const isAbandoned =
+          isPositiveFlag(
+            row['Abandoned'],
+            'abandoned'
+          );
+
+        const isMissed =
+          isPositiveFlag(
+            row['Missed'],
+            'missed'
+          );
+
+        if (isAnswered) {
+          answeredTotal += 1;
+        }
+
+        if (isAbandoned) {
+          importedAbandoned[day][slot] += 1;
+          abandonedTotal += 1;
+        }
+
+        /*
+          Missed puede incluir también las abandonadas.
+          Se excluyen las abandonadas para no duplicar categorías.
+        */
+        if (
+          isMissed &&
+          !isAbandoned
+        ) {
+          importedMissed[day][slot] += 1;
+          missedTotal += 1;
+        }
+
+        const calleeName =
+          cleanText(
+            row['Callee Name']
+          );
+
+        if (
+          calleeName &&
+          calleeName !== '-'
+        ) {
+          activeAgentsBySlot[day][slot]
+            .add(calleeName);
+
+          allAgents.add(
+            calleeName
+          );
+        }
+      });
+
+      DAYS.forEach(day => {
+        TIME_SLOTS.forEach(slot => {
+          importedAgents[day][slot] =
+            activeAgentsBySlot[day][slot]
+              .size;
+        });
+      });
+
+      callsMatrix =
+        importedCalls;
+
+      agentsMatrix =
+        importedAgents;
+
+      abandonedMatrix =
+        importedAbandoned;
+
+      missedMatrix =
+        importedMissed;
+
+      localStorage.setItem(
+        STORAGE_KEYS.calls,
+        JSON.stringify(callsMatrix)
+      );
+
+      localStorage.setItem(
+        STORAGE_KEYS.agents,
+        JSON.stringify(agentsMatrix)
+      );
+
+      localStorage.setItem(
+        STORAGE_KEYS.abandoned,
+        JSON.stringify(abandonedMatrix)
+      );
+
+      localStorage.setItem(
+        STORAGE_KEYS.missed,
+        JSON.stringify(missedMatrix)
+      );
+
+      renderAll();
+      showSaveStatus();
+
+      document.getElementById(
+        'summaryRows'
+      ).innerText =
+        rows.length.toLocaleString();
+
+      document.getElementById(
+        'summaryCalls'
+      ).innerText =
+        validRows.toLocaleString();
+
+      document.getElementById(
+        'summaryAnswered'
+      ).innerText =
+        `${answeredTotal.toLocaleString()} · ${
+          pct(
+            validRows
+              ? answeredTotal /
+                validRows * 100
+              : 0
+          )
+        }`;
+
+      document.getElementById(
+        'summaryAbandoned'
+      ).innerText =
+        `${abandonedTotal.toLocaleString()} · ${
+          pct(
+            validRows
+              ? abandonedTotal /
+                validRows * 100
+              : 0
+          )
+        }`;
+
+      document.getElementById(
+        'summaryMissed'
+      ).innerText =
+        `${missedTotal.toLocaleString()} · ${
+          pct(
+            validRows
+              ? missedTotal /
+                validRows * 100
+              : 0
+          )
+        }`;
+
+      document.getElementById(
+        'summaryAgents'
+      ).innerText =
+        allAgents.size.toLocaleString();
+
+      document.getElementById(
+        'fileImportSummary'
+      ).classList.remove(
+        'hidden'
+      );
+
+      const ignoredMessage =
+        ignoredRows > 0
+          ? ` Se omitieron ${ignoredRows.toLocaleString()} filas por fecha, dirección u horario fuera del rango visible.`
+          : '';
+
+      setImportStatus(
+        `<i class="fa-solid fa-circle-check mr-1"></i> Se cargaron ${validRows.toLocaleString()} llamadas y se actualizaron las gráficas y tablas.${ignoredMessage}`,
+        'success'
+      );
+
+      collapseFileUploader(
+        selectedCallFile?.name ||
+          'Archivo cargado',
+        validRows
+      );
+
+      console.log(
+        '[Flujo] Archivo importado:',
+        {
+          totalRows: rows.length,
+          validRows,
+          ignoredRows,
+          answeredTotal,
+          abandonedTotal,
+          missedTotal,
+          uniqueAgents:
+            allAgents.size
+        }
+      );
+    }
+
+
+    /*
+    ==========================================================
+    CARGA Y GUARDADO
+    ==========================================================
+    */
+
+    function getFirstSavedValue(keys) {
+      for (const key of keys) {
+        const value =
+          localStorage.getItem(key);
+
+        if (value) {
+          return value;
+        }
+      }
+
+      return null;
+    }
+
+
+    function loadMatrices() {
+      try {
+        const savedCalls =
+          getFirstSavedValue([
+            STORAGE_KEYS.calls,
+            STORAGE_KEYS.oldCallsV3,
+            STORAGE_KEYS.oldCallsV2
+          ]);
+
+        callsMatrix =
+          savedCalls
+            ? normalizeMatrix(
+                JSON.parse(savedCalls),
+                'calls'
+              )
+            : defaultCallsMatrix();
+
+      } catch (error) {
+        callsMatrix =
+          defaultCallsMatrix();
+      }
+
+      try {
+        const savedAgents =
+          getFirstSavedValue([
+            STORAGE_KEYS.agents,
+            STORAGE_KEYS.oldAgentsV3,
+            STORAGE_KEYS.oldAgentsV2
+          ]);
+
+        agentsMatrix =
+          savedAgents
+            ? normalizeMatrix(
+                JSON.parse(savedAgents),
+                'agents'
+              )
+            : defaultAgentsMatrix();
+
+      } catch (error) {
+        agentsMatrix =
+          defaultAgentsMatrix();
+      }
+
+      try {
+        const savedAbandoned =
+          getFirstSavedValue([
+            STORAGE_KEYS.abandoned,
+            STORAGE_KEYS.oldAbandonedV3,
+            STORAGE_KEYS.oldAbandonedV2
+          ]);
+
+        abandonedMatrix =
+          savedAbandoned
+            ? normalizeMatrix(
+                JSON.parse(savedAbandoned),
+                'abandoned'
+              )
+            : defaultAbandonedMatrix();
+
+      } catch (error) {
+        abandonedMatrix =
+          defaultAbandonedMatrix();
+      }
+
+      try {
+        const savedMissed =
+          localStorage.getItem(
+            STORAGE_KEYS.missed
+          );
+
+        missedMatrix =
+          savedMissed
+            ? normalizeMatrix(
+                JSON.parse(savedMissed),
+                'missed'
+              )
+            : defaultMissedMatrix();
+
+      } catch (error) {
+        missedMatrix =
+          defaultMissedMatrix();
+      }
+
+      selectedDay =
+        getFirstSavedValue([
+          STORAGE_KEYS.selectedDay,
+          STORAGE_KEYS.oldSelectedDayV3,
+          STORAGE_KEYS.oldSelectedDayV2
+        ]) || 'Lunes';
+
+      if (!DAYS.includes(selectedDay)) {
+        selectedDay = 'Lunes';
+      }
+
+      chartView =
+        localStorage.getItem(
+          STORAGE_KEYS.chartView
+        ) || 'daily';
+
+      if (
+        chartView !== 'daily' &&
+        chartView !== 'weekly'
+      ) {
+        chartView = 'daily';
+      }
+    }
+
+
+    function saveAllMatrices() {
+      readEditorMatrix(
+        'callsEditor',
+        callsMatrix
+      );
+
+      readEditorMatrix(
+        'agentsEditor',
+        agentsMatrix
+      );
+
+      readEditorMatrix(
+        'abandonedEditor',
+        abandonedMatrix
+      );
+
+      readEditorMatrix(
+        'missedEditor',
+        missedMatrix
+      );
+
+      localStorage.setItem(
+        STORAGE_KEYS.calls,
+        JSON.stringify(callsMatrix)
+      );
+
+      localStorage.setItem(
+        STORAGE_KEYS.agents,
+        JSON.stringify(agentsMatrix)
+      );
+
+      localStorage.setItem(
+        STORAGE_KEYS.abandoned,
+        JSON.stringify(abandonedMatrix)
+      );
+
+      localStorage.setItem(
+        STORAGE_KEYS.missed,
+        JSON.stringify(missedMatrix)
+      );
+
+      localStorage.setItem(
+        STORAGE_KEYS.selectedDay,
+        selectedDay
+      );
+
+      localStorage.setItem(
+        STORAGE_KEYS.chartView,
+        chartView
+      );
+
+      renderAll();
+      showSaveStatus();
+
+      console.log(
+        '[Flujo] Información guardada:',
+        {
+          callsMatrix,
+          agentsMatrix,
+          abandonedMatrix,
+          missedMatrix,
+          selectedDay,
+          chartView
+        }
+      );
+    }
+
+
+    function resetAllMatrices() {
+      const accepted =
+        window.confirm(
+          '¿Deseas reiniciar las cuatro tablas con los valores originales?'
+        );
+
+      if (!accepted) {
+        return;
+      }
+
+      callsMatrix =
+        defaultCallsMatrix();
+
+      agentsMatrix =
+        defaultAgentsMatrix();
+
+      abandonedMatrix =
+        defaultAbandonedMatrix();
+
+      missedMatrix =
+        defaultMissedMatrix();
+
+      localStorage.removeItem(
+        STORAGE_KEYS.calls
+      );
+
+      localStorage.removeItem(
+        STORAGE_KEYS.agents
+      );
+
+      localStorage.removeItem(
+        STORAGE_KEYS.abandoned
+      );
+
+      localStorage.removeItem(
+        STORAGE_KEYS.missed
+      );
+
+      renderAll();
+      showSaveStatus();
+    }
+
+
+    /*
+    ==========================================================
+    SELECTORES
+    ==========================================================
+    */
+
+    function changeSelectedDay() {
+      selectedDay =
+        document.getElementById(
+          'daySelector'
+        ).value;
+
+      localStorage.setItem(
+        STORAGE_KEYS.selectedDay,
+        selectedDay
+      );
+
+      renderChart();
+    }
+
+
+    function setChartView(view) {
+      if (
+        view !== 'daily' &&
+        view !== 'weekly'
+      ) {
+        return;
+      }
+
+      chartView = view;
+
+      localStorage.setItem(
+        STORAGE_KEYS.chartView,
+        chartView
+      );
+
+      updateChartControls();
+      renderChart();
+    }
+
+
+    function updateChartControls() {
+      const dailyButton =
+        document.getElementById(
+          'dailyViewButton'
+        );
+
+      const weeklyButton =
+        document.getElementById(
+          'weeklyViewButton'
+        );
+
+      const daySelectorWrap =
+        document.getElementById(
+          'daySelectorWrap'
+        );
+
+      if (chartView === 'daily') {
+        dailyButton.className =
+          'viewButtonActive border px-4 py-2 rounded-xl text-xs font-black transition';
+
+        weeklyButton.className =
+          'viewButtonInactive border px-4 py-2 rounded-xl text-xs font-black transition';
+
+        daySelectorWrap.classList.remove(
+          'hidden'
+        );
+
+      } else {
+        dailyButton.className =
+          'viewButtonInactive border px-4 py-2 rounded-xl text-xs font-black transition';
+
+        weeklyButton.className =
+          'viewButtonActive border px-4 py-2 rounded-xl text-xs font-black transition';
+
+        daySelectorWrap.classList.add(
+          'hidden'
+        );
+      }
+    }
+
+
+    /*
+    ==========================================================
+    NIVEL DE LLAMADAS
+    ==========================================================
+    */
+
+    function level(value) {
+      const total =
+        num(value);
+
+      if (total >= 45) {
+        return {
+          label: 'Pico',
+          className:
+            'bg-rose-100 text-rose-900 border-rose-200'
+        };
+      }
+
+      if (total >= 35) {
+        return {
+          label: 'Alto',
+          className:
+            'bg-orange-100 text-orange-900 border-orange-200'
+        };
+      }
+
+      if (total >= 20) {
+        return {
+          label: 'Medio',
+          className:
+            'bg-amber-100 text-amber-900 border-amber-200'
+        };
+      }
+
+      if (total >= 1) {
+        return {
+          label: 'Bajo',
+          className:
+            'bg-emerald-100 text-emerald-900 border-emerald-200'
+        };
+      }
+
+      return {
+        label: 'Sin data',
+        className:
+          'bg-white text-slate-400 border-slate-100'
+      };
+    }
+
+
+    /*
+    ==========================================================
+    MATRIZ SEMÁFORO
+    ==========================================================
+    */
+
+    function renderHeatmap() {
+      const table =
+        document.getElementById(
+          'heatmapTable'
+        );
+
+      const header = `
+        <thead>
+          <tr>
+            <th class="sticky left-0 bg-white z-10 p-3 text-[10px] uppercase text-slate-400 font-black">
+              Día
+            </th>
+
+            ${TIME_SLOTS.map(slot => `
+              <th class="p-3 text-center text-[10px] uppercase text-slate-400 font-black whitespace-nowrap">
+                ${formatTimeSlot(slot)}
+              </th>
+            `).join('')}
+          </tr>
+        </thead>
+      `;
+
+      const body = `
+        <tbody>
+          ${DAYS.map(day => `
+            <tr>
+              <td class="sticky left-0 bg-white z-10 p-3 font-black text-slate-700">
+                ${day}
+              </td>
+
+              ${TIME_SLOTS.map(slot => {
+                const calls =
+                  num(callsMatrix?.[day]?.[slot]);
+
+                const agents =
+                  num(agentsMatrix?.[day]?.[slot]);
+
+                const abandoned =
+                  num(abandonedMatrix?.[day]?.[slot]);
+
+                const missed =
+                  num(missedMatrix?.[day]?.[slot]);
+
+                const activityLevel =
+                  level(calls);
+
+                return `
+                  <td class="heatCell align-top border rounded-2xl overflow-hidden ${activityLevel.className}">
+                    <div class="p-3 text-center">
+                      <b class="block text-sm">
+                        ${calls.toLocaleString()} llamadas
+                      </b>
+
+                      <span class="block mt-1 text-[10px] font-black uppercase tracking-wide">
+                        ${activityLevel.label}
+                      </span>
+                    </div>
+
+                    <div class="border-t border-current/15 bg-white/55 p-3 text-center space-y-1">
+                      <b class="block text-xs">
+                        ${agents.toLocaleString()}
+                        ${agents === 1 ? 'agente' : 'agentes'}
+                      </b>
+
+                      <span class="block text-[10px] font-bold">
+                        ${abandoned} abandonadas · ${pct(abandonmentRate(day, slot))}
+                      </span>
+
+                      <span class="block text-[10px] font-bold">
+                        ${missed} perdidas · ${pct(missedRate(day, slot))}
+                      </span>
+                    </div>
+                  </td>
+                `;
+              }).join('')}
+            </tr>
+          `).join('')}
+        </tbody>
+      `;
+
+      table.innerHTML =
+        header + body;
+    }
+
+
+    /*
+    ==========================================================
+    EDITORES
+    ==========================================================
+    */
+
+    function renderEditors() {
+      renderEditorTable(
+        'callsEditor',
+        callsMatrix,
+        'calls'
+      );
+
+      renderEditorTable(
+        'agentsEditor',
+        agentsMatrix,
+        'agents'
+      );
+
+      renderEditorTable(
+        'abandonedEditor',
+        abandonedMatrix,
+        'abandoned'
+      );
+
+      renderEditorTable(
+        'missedEditor',
+        missedMatrix,
+        'missed'
+      );
+    }
+
+
+    function renderEditorTable(
+      tableId,
+      matrix,
+      matrixType
+    ) {
+      const table =
+        document.getElementById(tableId);
+
+      const header = `
+        <thead>
+          <tr>
+            <th class="sticky left-0 bg-white z-10 p-3 text-[10px] uppercase text-slate-400 font-black">
+              Día
+            </th>
+
+            ${TIME_SLOTS.map(slot => `
+              <th class="p-3 text-center text-[10px] uppercase text-slate-400 font-black whitespace-nowrap">
+                ${formatTimeSlot(slot)}
+              </th>
+            `).join('')}
+          </tr>
+        </thead>
+      `;
+
+      const body = `
+        <tbody>
+          ${DAYS.map(day => `
+            <tr>
+              <td class="sticky left-0 bg-white z-10 p-3 font-black text-slate-700">
+                ${day}
+              </td>
+
+              ${TIME_SLOTS.map(slot => `
+                <td
+                  contenteditable="true"
+                  inputmode="numeric"
+                  data-day="${day}"
+                  data-slot="${slot}"
+                  data-matrix-type="${matrixType}"
+                  onpaste="pasteMatrix(event, this)"
+                  onblur="normalizeEditorCell(this)"
+                  class="editCell text-center border rounded-xl p-3 bg-slate-50 text-slate-900 font-black"
+                >
+                  ${Math.round(
+                    num(matrix?.[day]?.[slot])
+                  )}
+                </td>
+              `).join('')}
+            </tr>
+          `).join('')}
+        </tbody>
+      `;
+
+      table.innerHTML =
+        header + body;
+    }
+
+
+    function normalizeEditorCell(cell) {
+      cell.innerText =
+        Math.max(
+          0,
+          Math.round(
+            num(cell.innerText)
+          )
+        );
+    }
+
+
+    function pasteMatrix(
+      event,
+      startingCell
+    ) {
+      event.preventDefault();
+
+      const clipboardText = (
+        event.clipboardData ||
+        window.clipboardData
+      ).getData('text');
+
+      if (!clipboardText.trim()) {
+        return;
+      }
+
+      const pastedRows =
+        clipboardText
+          .replace(/\r/g, '')
+          .split('\n')
+          .filter(row => row.length > 0)
+          .map(row => row.split('\t'));
+
+      const startingDay =
+        startingCell.dataset.day;
+
+      const startingSlot =
+        startingCell.dataset.slot;
+
+      const matrixType =
+        startingCell.dataset.matrixType;
+
+      const startingDayIndex =
+        DAYS.indexOf(startingDay);
+
+      const startingSlotIndex =
+        TIME_SLOTS.indexOf(startingSlot);
+
+      pastedRows.forEach(
+        (row, rowIndex) => {
+          row.forEach(
+            (value, columnIndex) => {
+              const targetDay =
+                DAYS[
+                  startingDayIndex +
+                  rowIndex
+                ];
+
+              const targetSlot =
+                TIME_SLOTS[
+                  startingSlotIndex +
+                  columnIndex
+                ];
+
+              if (
+                targetDay === undefined ||
+                targetSlot === undefined
+              ) {
+                return;
+              }
+
+              const targetCell =
+                document.querySelector(
+                  `.editCell[data-matrix-type="${matrixType}"][data-day="${targetDay}"][data-slot="${targetSlot}"]`
+                );
+
+              if (targetCell) {
+                targetCell.innerText =
+                  Math.max(
+                    0,
+                    Math.round(
+                      num(value)
+                    )
+                  );
+              }
+            }
+          );
+        }
+      );
+    }
+
+
+    function readEditorMatrix(
+      tableId,
+      targetMatrix
+    ) {
+      document
+        .querySelectorAll(
+          `#${tableId} .editCell`
+        )
+        .forEach(cell => {
+          const day =
+            cell.dataset.day;
+
+          const slot =
+            cell.dataset.slot;
+
+          if (!targetMatrix[day]) {
+            targetMatrix[day] = {};
+          }
+
+          targetMatrix[day][slot] =
+            Math.max(
+              0,
+              Math.round(
+                num(cell.innerText)
+              )
+            );
+        });
+    }
+
+
+    /*
+    ==========================================================
+    GRÁFICAS
+    ==========================================================
+    */
+
+    function renderChart() {
+      const canvas =
+        document.getElementById(
+          'hourlyFlowChart'
+        );
+
+      if (!canvas) {
+        return;
+      }
+
+      if (hourlyFlowChart) {
+        hourlyFlowChart.destroy();
+      }
+
+      if (chartView === 'weekly') {
+        renderWeeklyChart(canvas);
+      } else {
+        renderDailyChart(canvas);
+      }
+    }
+
+
+    function configureChartWidth(mode) {
+      const canvasWrap =
+        document.getElementById(
+          'chartCanvasWrap'
+        );
+
+      if (!canvasWrap) {
+        return;
+      }
+
+      if (mode === 'weekly') {
+        canvasWrap.style.width = '5200px';
+        canvasWrap.style.minWidth = '5200px';
+      } else {
+        canvasWrap.style.width = '100%';
+        canvasWrap.style.minWidth = '100%';
+      }
+    }
+
+
+    function renderDailyChart(canvas) {
+      configureChartWidth('daily');
+
+      const calls =
+        TIME_SLOTS.map(slot =>
+          num(callsMatrix?.[selectedDay]?.[slot])
+        );
+
+      const agents =
+        TIME_SLOTS.map(slot =>
+          num(agentsMatrix?.[selectedDay]?.[slot])
+        );
+
+      const abandoned =
+        TIME_SLOTS.map(slot =>
+          num(abandonedMatrix?.[selectedDay]?.[slot])
+        );
+
+      const missed =
+        TIME_SLOTS.map(slot =>
+          num(missedMatrix?.[selectedDay]?.[slot])
+        );
+
+      document.getElementById(
+        'chartTitle'
+      ).innerText =
+        'Distribución por horario';
+
+      document.getElementById(
+        'chartDescription'
+      ).innerText =
+        'Rojo = llamadas · Verde = agentes · Azul = abandonadas · Naranja = perdidas';
+
+      document.getElementById(
+        'chartDayLabel'
+      ).innerText =
+        selectedDay;
+
+      hourlyFlowChart =
+        new Chart(canvas, {
+          type: 'line',
+
+          data: {
+            labels:
+              TIME_SLOTS.map(
+                formatTimeSlot
+              ),
+
+            datasets: [
+              {
+                label: 'Llamadas recibidas',
+                data: calls,
+                borderColor: '#ef4444',
+                backgroundColor:
+                  'rgba(239, 68, 68, 0.10)',
+                tension: 0.35,
+                fill: true,
+                borderWidth: 3,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+                yAxisID: 'yVolume'
+              },
+
+              {
+                label: 'Agentes asignados',
+                data: agents,
+                borderColor: '#10b981',
+                backgroundColor:
+                  'rgba(16, 185, 129, 0.08)',
+                tension: 0.35,
+                fill: false,
+                borderWidth: 3,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+                yAxisID: 'yVolume'
+              },
+
+              {
+                label: 'Llamadas abandonadas',
+                data: abandoned,
+                borderColor: '#2563eb',
+                backgroundColor: '#2563eb',
+                tension: 0.25,
+                fill: false,
+                borderWidth: 2,
+                pointRadius: 5,
+                pointHoverRadius: 8,
+                yAxisID: 'yVolume'
+              },
+
+              {
+                label: 'Llamadas perdidas',
+                data: missed,
+                borderColor: '#f97316',
+                backgroundColor: '#f97316',
+                tension: 0.25,
+                fill: false,
+                borderWidth: 2,
+                pointRadius: 5,
+                pointHoverRadius: 8,
+                yAxisID: 'yVolume'
+              }
+            ]
+          },
+
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+
+            interaction: {
+              mode: 'index',
+              intersect: false
+            },
+
+            plugins: {
+              legend: {
+                labels: {
+                  usePointStyle: true,
+                  boxWidth: 8,
+
+                  font: {
+                    weight: 'bold'
+                  }
+                }
+              },
+
+              tooltip: {
+                callbacks: {
+                  title(context) {
+                    const index =
+                      context[0]?.dataIndex;
+
+                    if (
+                      index === undefined
+                    ) {
+                      return '';
+                    }
+
+                    return `${selectedDay} · ${
+                      rangeTimeSlot(
+                        TIME_SLOTS[index]
+                      )
+                    }`;
+                  },
+
+                  label(context) {
+                    const index =
+                      context.dataIndex;
+
+                    const label =
+                      context.dataset.label;
+
+                    const value =
+                      num(context.parsed.y);
+
+                    if (
+                      label ===
+                      'Llamadas abandonadas'
+                    ) {
+                      return `Abandonadas: ${Math.round(
+                        value
+                      ).toLocaleString()} llamadas · ${pct(
+                        abandonmentRate(
+                          selectedDay,
+                          TIME_SLOTS[index]
+                        )
+                      )}`;
+                    }
+
+                    if (
+                      label ===
+                      'Llamadas perdidas'
+                    ) {
+                      return `Perdidas: ${Math.round(
+                        value
+                      ).toLocaleString()} llamadas · ${pct(
+                        missedRate(
+                          selectedDay,
+                          TIME_SLOTS[index]
+                        )
+                      )}`;
+                    }
+
+                    return `${label}: ${Math.round(
+                      value
+                    ).toLocaleString()}`;
+                  }
+                }
+              }
+            },
+
+            scales: {
+              x: {
+                grid: {
+                  display: false
+                },
+
+                ticks: {
+                  autoSkip: true,
+                  maxRotation: 45,
+                  minRotation: 0,
+                  maxTicksLimit: 26
+                }
+              },
+
+              yVolume: {
+                type: 'linear',
+                position: 'left',
+                beginAtZero: true,
+
+                title: {
+                  display: true,
+                  text:
+                    'Llamadas / Agentes',
+
+                  font: {
+                    weight: 'bold'
+                  }
+                },
+
+                grid: {
+                  color: '#f1f5f9'
+                },
+
+                ticks: {
+                  precision: 0
+                }
+              }
+            }
+          }
+        });
+    }
+
+
+    function renderWeeklyChart(canvas) {
+      configureChartWidth('weekly');
+
+      const weeklyPoints = [];
+
+      DAYS.forEach(day => {
+        TIME_SLOTS.forEach(slot => {
+          weeklyPoints.push({
+            day,
+            slot
+          });
+        });
+      });
+
+      const labels =
+        weeklyPoints.map(point =>
+          `${point.day} · ${formatTimeSlot(point.slot)}`
+        );
+
+      const calls =
+        weeklyPoints.map(point =>
+          num(
+            callsMatrix?.[point.day]?.[point.slot]
+          )
+        );
+
+      const agents =
+        weeklyPoints.map(point =>
+          num(
+            agentsMatrix?.[point.day]?.[point.slot]
+          )
+        );
+
+      const abandoned =
+        weeklyPoints.map(point =>
+          num(
+            abandonedMatrix?.[point.day]?.[point.slot]
+          )
+        );
+
+      const missed =
+        weeklyPoints.map(point =>
+          num(
+            missedMatrix?.[point.day]?.[point.slot]
+          )
+        );
+
+      document.getElementById(
+        'chartTitle'
+      ).innerText =
+        'Flujo completo de toda la semana';
+
+      document.getElementById(
+        'chartDescription'
+      ).innerText =
+        'Vista continua de lunes a domingo en intervalos de 30 minutos. Desliza horizontalmente para recorrer toda la semana.';
+
+      document.getElementById(
+        'chartDayLabel'
+      ).innerText =
+        'Semana completa';
+
+      hourlyFlowChart =
+        new Chart(canvas, {
+          type: 'line',
+
+          data: {
+            labels,
+
+            datasets: [
+              {
+                label: 'Llamadas recibidas',
+                data: calls,
+                borderColor: '#ef4444',
+                backgroundColor:
+                  'rgba(239, 68, 68, 0.08)',
+                tension: 0.25,
+                fill: true,
+                borderWidth: 2.5,
+                pointRadius: 2,
+                pointHoverRadius: 6,
+                yAxisID: 'yVolume'
+              },
+
+              {
+                label: 'Agentes asignados',
+                data: agents,
+                borderColor: '#10b981',
+                backgroundColor:
+                  'rgba(16, 185, 129, 0.06)',
+                tension: 0.25,
+                fill: false,
+                borderWidth: 2.5,
+                pointRadius: 2,
+                pointHoverRadius: 6,
+                yAxisID: 'yVolume'
+              },
+
+              {
+                label: 'Llamadas abandonadas',
+                data: abandoned,
+                borderColor: '#2563eb',
+                backgroundColor: '#2563eb',
+                tension: 0.2,
+                fill: false,
+                borderWidth: 2,
+                pointRadius: 3,
+                pointHoverRadius: 7,
+                yAxisID: 'yVolume'
+              },
+
+              {
+                label: 'Llamadas perdidas',
+                data: missed,
+                borderColor: '#f97316',
+                backgroundColor: '#f97316',
+                tension: 0.2,
+                fill: false,
+                borderWidth: 2,
+                pointRadius: 3,
+                pointHoverRadius: 7,
+                yAxisID: 'yVolume'
+              }
+            ]
+          },
+
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+
+            interaction: {
+              mode: 'index',
+              intersect: false
+            },
+
+            plugins: {
+              legend: {
+                position: 'top',
+
+                labels: {
+                  usePointStyle: true,
+                  boxWidth: 8,
+                  padding: 18,
+
+                  font: {
+                    weight: 'bold'
+                  }
+                }
+              },
+
+              tooltip: {
+                callbacks: {
+                  title(context) {
+                    const index =
+                      context[0]?.dataIndex;
+
+                    if (
+                      index === undefined
+                    ) {
+                      return '';
+                    }
+
+                    const point =
+                      weeklyPoints[index];
+
+                    return `${point.day} · ${
+                      rangeTimeSlot(point.slot)
+                    }`;
+                  },
+
+                  label(context) {
+                    const index =
+                      context.dataIndex;
+
+                    const point =
+                      weeklyPoints[index];
+
+                    const label =
+                      context.dataset.label;
+
+                    const value =
+                      num(context.parsed.y);
+
+                    if (
+                      label ===
+                      'Llamadas abandonadas'
+                    ) {
+                      return `Abandonadas: ${Math.round(
+                        value
+                      ).toLocaleString()} llamadas · ${pct(
+                        abandonmentRate(
+                          point.day,
+                          point.slot
+                        )
+                      )}`;
+                    }
+
+                    if (
+                      label ===
+                      'Llamadas perdidas'
+                    ) {
+                      return `Perdidas: ${Math.round(
+                        value
+                      ).toLocaleString()} llamadas · ${pct(
+                        missedRate(
+                          point.day,
+                          point.slot
+                        )
+                      )}`;
+                    }
+
+                    return `${label}: ${Math.round(
+                      value
+                    ).toLocaleString()}`;
+                  }
+                }
+              }
+            },
+
+            scales: {
+              x: {
+                grid: {
+                  display: false
+                },
+
+                ticks: {
+                  autoSkip: false,
+                  maxRotation: 90,
+                  minRotation: 90,
+
+                  callback(value, index) {
+                    const point =
+                      weeklyPoints[index];
+
+                    if (!point) {
+                      return '';
+                    }
+
+                    const isFirstSlot =
+                      point.slot === TIME_SLOTS[0];
+
+                    if (isFirstSlot) {
+                      return `${point.day} ${formatTimeSlot(point.slot)}`;
+                    }
+
+                    return formatTimeSlot(
+                      point.slot
+                    );
+                  },
+
+                  font: {
+                    size: 9,
+                    weight: '600'
+                  }
+                }
+              },
+
+              yVolume: {
+                type: 'linear',
+                position: 'left',
+                beginAtZero: true,
+
+                title: {
+                  display: true,
+                  text:
+                    'Llamadas / Agentes',
+
+                  font: {
+                    weight: 'bold'
+                  }
+                },
+
+                grid: {
+                  color: '#f1f5f9'
+                },
+
+                ticks: {
+                  precision: 0
+                }
+              }
+            }
+          }
+        });
+    }
+
+
+    /*
+    ==========================================================
+    RENDER GENERAL
+    ==========================================================
+    */
+
+    function renderAll() {
+      document.getElementById(
+        'daySelector'
+      ).value =
+        selectedDay;
+
+      updateChartControls();
+      renderHeatmap();
+      renderEditors();
+      renderChart();
+    }
+
+
+    /*
+    ==========================================================
+    INICIO
+    ==========================================================
+    */
+
+    function initializeFlowModule() {
+      loadMatrices();
+      renderAll();
+
+      console.log(
+        '[Flujo] Módulo inicializado:',
+        {
+          selectedDay,
+          chartView,
+          callsMatrix,
+          agentsMatrix,
+          abandonedMatrix,
+          missedMatrix
+        }
+      );
+    }
+
+
+    window.addEventListener(
+      'DOMContentLoaded',
+      initializeFlowModule
+    );
+  </script>
+
+</body>
+</html>
